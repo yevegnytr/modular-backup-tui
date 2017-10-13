@@ -1,8 +1,8 @@
 #!/bin/bash
-# Quantum AIPP enabled backup script
+# Modular backup-resrore script
 # libncurses based TUI using dialog
 # Parallel compression with pbzip2 and progress gauge with pv
-# Written by Yevgeny Trachtinov
+# Written by Yevgeny Trachtinov (jendoz@gmail.com)
 
 # Global variables
 # ==================================
