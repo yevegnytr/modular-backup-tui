@@ -2,6 +2,7 @@
 # Modular backup-resrore script
 # libncurses based TUI using dialog
 # Parallel compression with pbzip2 and progress gauge with pv
+# Originaly written for the Orbotech Quantum machine maintenance
 # Written by Yevgeny Trachtinov (jendoz@gmail.com)
 
 # Global variables
@@ -93,19 +94,20 @@ backup_rotate() {
 }
 
 # Decrypt (and extract) backup file
+# Replace gnupg home with your variant
 decrypt_file() {
 	echo "$(date +"%Y/%m/%d %H:%M:%S") AIPP status is $AIPP." >> $LOGFILE
 	if [ $AIPP = "true" ]; then
 			echo "$(date +"%Y/%m/%d %H:%M:%S") Starting decryption..." >> $LOGFILE
 			export GNUPGHOME=/export/home/fpd/.gnupg
-			tpm_unsealdata -z -i /export/home/fpd/.gnupg/gpg_pass_QtmDevMch | gpg2  -o /export/restore.tar.bz2 --yes --batch  --passphrase-fd 0 $RESTORE_FILE >> $LOGFILE
+			tpm_unsealdata -z -i /home/user/.gnupg/gpg_pass | gpg2  -o /export/restore.tar.bz2 --yes --batch  --passphrase-fd 0 $RESTORE_FILE >> $LOGFILE
 			time tar xvf /export/restore.tar.bz2 -C / >> $LOGFILE
 			rm -f /export/restore.tar.bz2
 		else
 			echo "$(date +"%Y/%m/%d %H:%M:%S") Copying not encrypted file to local storage before extract." >> $LOGFILE
 			rsync -v --log-file-format="%t - %f %b" --log-file=$LOGFILE --progress $RESTORE_FILE /export/
-			time tar xvf /export/QTM*.tar.bz2 -C / >> $LOGFILE
-			rm -f /export/QTM*.tar.bz2
+			time tar xvf /export/MOD*.tar.bz2 -C / >> $LOGFILE
+			rm -f /export/MOD*.tar.bz2
 	fi
 }
 
@@ -142,7 +144,7 @@ compress_files() {
   echo "$(date +"%Y/%m/%d %H:%M:%S") Staring compression from backup list." >> $LOGFILE
   (tar cf - --files-from $CONF_FILE \
     | pv -n -s $(find $(cat backup.conf | tr '\r\n' ' ') -type f -exec du -sb {} \;| awk '{print $1}' | awk '{ sum += $0 } END { print sum }') \
-    | pbzip2 -vrc -9 > QTM_backup_${HOSTNAME}_$FDATE.tar.bz2) 2>&1 \
+    | pbzip2 -vrc -9 > MOD_backup_${HOSTNAME}_$FDATE.tar.bz2) 2>&1 \
     | dialog --gauge 'Compressing files' 7 70
 }
 
@@ -150,24 +152,25 @@ compress_files() {
 # Rsync the file after we checked that we have enough free space on destination
 copy_backup_file() {
   echo "$(date +"%Y/%m/%d %H:%M:%S") Staring to copy backup file to destination..." >> $LOGFILE
-  rsync -v --remove-source-files --log-file-format="%t - %f %b" --log-file=$LOGFILE --progress QTM_backup_${HOSTNAME}_$FDATE.tar.bz2* ${BACKUP_LOCATION}
+  rsync -v --remove-source-files --log-file-format="%t - %f %b" --log-file=$LOGFILE --progress MOD_backup_${HOSTNAME}_$FDATE.tar.bz2* ${BACKUP_LOCATION}
 }  
 
 
 # Encrypt compressed archive using machine gpg keys
+# Replace "target-contact" withyour target
 encrypt_arch() {
   echo "$(date +"%Y/%m/%d %H:%M:%S") AIPP status is $AIPP." >> $LOGFILE
 	if [ $AIPP = "true" ]; then
 		echo "$(date +"%Y/%m/%d %H:%M:%S") Staring encryption of backup archive." >> $LOGFILE
 		export GNUPGHOME=/export/home/fpd/.gnupg
-		gpg2 -e -r QtmDevMch --yes --always-trust --batch "QTM_backup_${HOSTNAME}_$FDATE.tar.bz2" >> $LOGFILE
+		gpg2 -e -r target-contact --yes --always-trust --batch "MOD_backup_${HOSTNAME}_$FDATE.tar.bz2" >> $LOGFILE
 			if [ $? -eq 0 ]
 				then
 					echo "$(date +"%Y/%m/%d %H:%M:%S") Ecryption done." >> $LOGFILE
-					rm -f "QTM_backup_${HOSTNAME}_$FDATE.tar.bz2"
+					rm -f "MOD_backup_${HOSTNAME}_$FDATE.tar.bz2"
 				else
 					echo "$(date +"%Y/%m/%d %H:%M:%S") Encryption failed." >> $LOGFILE
-					rm -f "QTM_backup_${HOSTNAME}_$FDATE.tar.bz2"
+					rm -f "MOD_backup_${HOSTNAME}_$FDATE.tar.bz2"
 					exit 1
 			fi
 	else
@@ -204,7 +207,7 @@ exitstatus=$?
 # Check size before backup
 check_size() {
 DST_FREE_SPACE=`df ${BACKUP_LOCATION} | awk 'FNR == 2 {print $4}'`
-BACKUP_FILE_SIZE=`du QTM_backup_${HOSTNAME}_$FDATE.tar.bz2* | awk '{print $1}'`
+BACKUP_FILE_SIZE=`du MOD_backup_${HOSTNAME}_$FDATE.tar.bz2* | awk '{print $1}'`
 
 	if [ "$DST_FREE_SPACE" -gt "$BACKUP_FILE_SIZE" ];
 		then
@@ -212,7 +215,7 @@ BACKUP_FILE_SIZE=`du QTM_backup_${HOSTNAME}_$FDATE.tar.bz2* | awk '{print $1}'`
 		else
 			echo "$(date +"%Y/%m/%d %H:%M:%S") There is NOT enough space in destination." >> $LOGFILE
 			dialog --colors --backtitle "Free space check"  --title "Error!" --msgbox '\ZbNot enough free space on destination.\Zn' 6 45
-			rm -f QTM_backup_${HOSTNAME}_$FDATE.tar.bz2*
+			rm -f MOD_backup_${HOSTNAME}_$FDATE.tar.bz2*
 			exit 1
   fi
 }
